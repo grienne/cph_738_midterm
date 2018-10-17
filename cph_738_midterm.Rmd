@@ -1,0 +1,81 @@
+---
+title: "midterm"
+author: "grienne"
+date: "October 16, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Foundation}
+
+library(ggplot2)
+library(dplyr)
+library(readxl)
+
+
+dat <- read_excel("truven_dat.xlsx")
+
+```
+
+```{r Question 1}
+
+#Question 1
+    #Part (A) & (B)
+#Filter for Age (18- 64) & NETPAY (x > 0)
+dat_q1 <- dat %>%
+              filter(18 <= AGE & AGE <=64) %>%
+                filter(0 < NETPAY_90 )
+
+dat_q1$BupFlag <- with(dat_q1,
+               ifelse(Bupropion == 1, "No Bupropion", "Bupropion")
+               )
+                  
+
+#Select Year, Pay, Qty, Age, and StUD Type columns                                  
+q1_data <- dat_q1 %>%
+            select(StUD_Year, NETPAY_90, StUD_Qty, AGE, StUD_Type, BupFlag)
+
+#Part C(1) - Total Cases
+dat_p_case <- aggregate(q1_data$StUD_Qty, by=list(Year=q1_data$StUD_Year), FUN=sum)
+p_case <- ggplot(data = dat_p_case, mapping = aes(x=Year, y=x))
+p_case + geom_bar(stat = "identity") + labs(y = "Case Quantity")
+
+#Part C(2) - Total Net Pay
+dat_p_pay <- aggregate(q1_data$NETPAY_90, by=list(Year=q1_data$StUD_Year), FUN=sum)
+p_pay <- ggplot(data = dat_p_pay, mapping = aes(x=Year, y=x))
+p_pay + geom_bar(stat = "identity") + labs(y = "Case Quantity")
+
+
+#The graphs are quite similar which fundamentally makes sense, with increased number of cases we expect a reasonable increase in net pay and this approximately matches over the two graphs. 
+
+```
+
+
+```{r Question 2}
+
+
+
+#transfer q1 -> q2 data
+q2_dat <- q1_data
+str(q2_dat)
+#factorize Year
+q2_dat$StUD_Year <- as.factor(q2_dat$StUD_Year)
+
+q2_lm_fac <- lm(NETPAY_90~StUD_Year + BupFlag, data = q2_dat)
+summary(q2_lm_fac)
+
+
+
+#Part (A)
+q2_lm <- lm(NETPAY_90~StUD_Year + BupFlag, data = q1_data)
+summary(q2_lm)
+
+#Would not include interaction term: StUD_Year*BupFlag,
+
+#Part (B)
+##
+
+```
