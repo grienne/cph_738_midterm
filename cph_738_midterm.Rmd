@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2)
 library(dplyr)
 library(readxl)
-
+library(broom)
 
 dat <- read_excel("truven_dat.xlsx")
 
@@ -28,61 +28,105 @@ dat <- read_excel("truven_dat.xlsx")
 dat_q1 <- dat %>%
               filter(18 <= AGE & AGE <=64) %>%
                 filter(0 < NETPAY_90 )
-
+##nobup is 0, bup is 1 #code from assignment 3
 dat_q1$BupFlag <- with(dat_q1,
-               ifelse(Bupropion == 1, "No Bupropion", "Bupropion")
+               ifelse(Bupropion == 0, "No_Bup", "Bup")
                )
                   
-
-#Select Year, Pay, Qty, Age, and StUD Type columns                                  
+#Select Year, Pay, Qty, Age, and StUD Type columns
 q1_data <- dat_q1 %>%
             select(StUD_Year, NETPAY_90, StUD_Qty, AGE, StUD_Type, BupFlag)
+#BupFlag chr -> Factor
+q1_data$BupFlag <- as.factor(q1_data$BupFlag) 
 
-#Part C(1) - Total Cases
+#Part C(1) - Total Cases per year
 dat_p_case <- aggregate(q1_data$StUD_Qty, by=list(Year=q1_data$StUD_Year), FUN=sum)
 p_case <- ggplot(data = dat_p_case, mapping = aes(x=Year, y=x))
 p_case + geom_bar(stat = "identity") + labs(y = "Case Quantity")
 
-#Part C(2) - Total Net Pay
+#Part C(2) - Total Net Pay - Sum of NetPay_90 per year
 dat_p_pay <- aggregate(q1_data$NETPAY_90, by=list(Year=q1_data$StUD_Year), FUN=sum)
 p_pay <- ggplot(data = dat_p_pay, mapping = aes(x=Year, y=x))
-p_pay + geom_bar(stat = "identity") + labs(y = "Case Quantity")
+p_pay + geom_bar(stat = "identity") + labs(y = "Total Net Pay - 90 Days")
 
 
-#The graphs are quite similar which fundamentally makes sense, with increased number of cases we expect a reasonable increase in net pay and this approximately matches over the two graphs. 
+#The graphs are similar which fundamentally makes sense, with increased number of cases we expect 
+#a reasonable increase in net pay and this approximately matches over the two graphs. There 
+#is a similar pattern of rise/call in the peaks in both charts which again is sensible. As for 
+#the shape of the graphs, the quantity graph might be slightly more skewed to the left 
+#versus the right in the total pay graph, but there are possible explanations for this. As these 
+#are graphs of total sums of NetPay_90 over 7 years, it is just seven points so any outliers gets 
+#added in and skews averages so when compared to the quantity of cases it shifts outcomes where 
+#one would expect similar distributions, cases significantly high costs impact the distribution. 
 
 ```
 
 
 ```{r Question 2}
 
+###Check the distribution of NETPAY_90. Do you need to transform this variable?  
+   #Netpay_90 Distribution
+        np_90_hist <- ggplot(q1_data, aes(x=NETPAY_90))
+        np_90_hist + geom_histogram()
+          #There is a need to transform the data. 
+                  summary(q1_data$NETPAY_90)
+              #chose log +1 because there were a few below $1 payments
+                  summary(log10(q1_data$NETPAY_90))
 
+##log transform NetPAY_90 
+dat_q2 <- q1_data %>% 
+               mutate(pay_log = log(q1_data$NETPAY_90))
+      
+         #Log Transformed Pay
+            np_90_log <- ggplot(dat_q2, aes(x=pay_log))
+            np_90_log + geom_histogram()
+              #data is much more approachable. 
 
-#transfer q1 -> q2 data
-q2_dat <- q1_data
-str(q2_dat)
-#factorize Year
-q2_dat$StUD_Year <- as.factor(q2_dat$StUD_Year)
+##Think about whether you want to treat StUD_Year as a factor or as a numerical variable.            
+#There isn't really a right or wrong, but if we treat year as a factor, the output will be an 
+#explanation by year, whereas if we leave it as numerical, it will be over the whole timespan. 
+#This also addresses the interaction question, if we include theinteraction then having 
+#years as factors makes more sense, if we choose not to then leaving years as numbers is sensible.          
+            
+#relevel nobup as ref 
+dat_q2_relevel <- within(dat_q2, BupFlag <- relevel(BupFlag, ref = "No_Bup"))
+table(dat_q2_relevel$BupFlag)
 
-q2_lm_fac <- lm(NETPAY_90~StUD_Year + BupFlag, data = q2_dat)
-summary(q2_lm_fac)
+#A.
+###Year as Factor, Changed Reference to No_Bupropion
+q2_dat_log <- dat_q2_relevel
+q2_dat_log$StUD_Year <- as.factor(q2_dat_log$StUD_Year)
 
-
-
-#Part (A)
-q2_lm <- lm(NETPAY_90~StUD_Year + BupFlag, data = q1_data)
-summary(q2_lm)
-
-#Would not include interaction term: StUD_Year*BupFlag,
+q2_lm_fac_log_buprel <- lm(pay_log~StUD_Year + BupFlag, data = q2_dat_log)
+#If we include the interaction, the significance between years is lost.
+#Chose years as factors to identify the relationship of years individually. 
+#The interaction terms aren't significant either so removed them
+summary(q2_lm_fac_log_buprel)
+plot(q2_lm_fac_log_buprel)
+exp(coef(q2_lm_fac_log_buprel))
+confint(q2_lm_fac_log_buprel)
 
 #Part (B)
-##
-
+##Bupropion significantly increased Net 90-day payments (p = .3.15e(-14) > .05).  
 ```
 
-
-```{Question 3}
 
 Question 3
 
-```
+a. Main Outcome - Cost of hospitalization. 
+From Question 2 the linear model - The Netpay_90 distribution was not normal,there were several outliers 
+that drastically shifted the distribution. Transforming the data can reduce skewness and allow for inferential statistics. Presumably the authors transformed or accounted for this issue already if it was of concern for their work although they didn not specify NetPay_90 vs NETPay_365.  
+
+b.When hospital costs were predicted it was found that that for age groups 18-44 vs 55-64, (Beta = -2895.2, p< .0001) was a significant predictor. Indicating that it decreased outcome costs by $2,895.2. For age group 45 vs. 55-64, (Beta = -848.5, p < .0005) was a   significant predictor, indicating that there was a decrease in cost of about $848.5. The model controlled for Age, sex, MSA, and region.  Overall indicating that being younger decreased hospital costs.
+
+c.When all procedures and complications were considered it was found that Age groups 18-44 vs 55-64, (Beta = 808.3, p< .004) was a   significant predictor. Indicating that it increased outcome costs by $808.3. For age group 45 vs. 55-64, (Beta = 817.3, p < .0001)   indicating that it also increased cost. Model 6 removed the difference in cost outcomes by age and demonstrated a slight swing towards   increase in cost for the younger group respectively.
+
+d.Model 3 - controlling for comorbidities, STEMI, age, sex, MSA, and region, an increase in CCI lead to an increase in cost, but when   also accounting for the length of stay in model 4, CCI decreased the cost.
+
+e.They did a repeated measures mixed effect model to account for the fact that patients might have multipleClasses admissions  
+during the 3-year period. A MEM by definition includes random effects which in this case appears to be adjusting for patient behavior   but they did not specifically identify the random effect in their model or the coefficients etc.
+
+f.CABG was associated with a much longer length of stay (Beta = 47.992)
+
+g.American hospital costs are artifical. Research has consistently found that there are a wide variety of factors in healthcare costs   but they are all externally driven, not actual cost of care specific meaning that various external factors such as local policy etc   will be major driving forces in costs leading to significant differences. The significant cost changes over the years, regional   differences, the noted limitations by the authors as well contribute the differences in coefficients. Of particular interest would be   the explanation for the change in cost via Age.
+ 
